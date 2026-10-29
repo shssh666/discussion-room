@@ -47,6 +47,7 @@ ws.addEventListener('open', () => {
   connBadge.classList.add('online')
   input.disabled = false
   sendBtn.disabled = false
+  uploadBtn.disabled = false
   input.focus()
 })
 

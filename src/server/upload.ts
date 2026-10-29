@@ -40,23 +40,38 @@ async function uploadPlugin(app: FastifyInstance): Promise<void> {
     const dest = path.join(UPLOAD_DIR, savedName)
     const ws = createWriteStream(dest)
 
+    let sizeExceeded = false
     try {
       for await (const chunk of file.file) {
         totalSize += chunk.length
         if (totalSize > MAX_FILE_SIZE) {
+          sizeExceeded = true
           ws.destroy()
-          return reply.status(413).send({ error: 'file too large' })
+          break
         }
         chunks.push(chunk)
         ws.write(chunk)
       }
-      await new Promise<void>((resolve, reject) => {
-        ws.end(() => resolve())
-        ws.on('error', reject)
-      })
-    } catch {
+      if (!sizeExceeded) {
+        await new Promise<void>((resolve, reject) => {
+          ws.end(() => resolve())
+          ws.on('error', reject)
+        })
+      }
+    } catch (err) {
       ws.destroy()
+      // multipart 超限也会抛错，统一归为 413
+      const msg = (err as Error).message || ''
+      if (msg.includes('limit') || msg.includes('size')) {
+        return reply.status(413).send({ error: 'file too large' })
+      }
       return reply.status(500).send({ error: 'upload failed' })
+    }
+
+    if (sizeExceeded) {
+      // 清理半写文件
+      try { unlinkSync(dest) } catch { /* ignore */ }
+      return reply.status(413).send({ error: 'file too large' })
     }
 
     if (chunks.length > 0) {
@@ -81,6 +96,10 @@ async function uploadPlugin(app: FastifyInstance): Promise<void> {
     }
     const filePath = path.join(UPLOAD_DIR, name)
     if (!existsSync(filePath)) return reply.status(404).send({ error: 'not found' })
+    // SVG 强制下载，防止存储型 XSS（同源 inline 会执行内嵌脚本）
+    if (name.endsWith('.svg')) {
+      reply.header('Content-Disposition', `attachment; filename="${name}"`)
+    }
     return reply.sendFile(name, UPLOAD_DIR)
   })
 
