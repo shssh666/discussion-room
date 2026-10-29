@@ -213,4 +213,36 @@ body {
   padding: 14px;
   min-height: 0;
   overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.demo-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 12px;
+}
+
+.demo-controls button {
+  padding: 4px 10px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.demo-controls button:hover {
+  background: #f3f4f6;
+}
+
+#present-btn {
+  margin-left: auto;
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
 }

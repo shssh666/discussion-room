@@ -29,3 +29,10 @@ export interface SystemPayload {
   reason: string
   detail?: string
 }
+
+export interface DemoPayload {
+  file: string
+  page?: number
+  total?: number
+  presenter?: string
+}
