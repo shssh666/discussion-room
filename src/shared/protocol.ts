@@ -13,3 +13,19 @@ export interface WsMessage {
   payload: unknown
   ts: number
 }
+
+export interface ChatPayload {
+  id: string
+  from: string
+  text: string
+}
+
+export interface PresencePayload {
+  users: string[]
+  max: number
+}
+
+export interface SystemPayload {
+  reason: string
+  detail?: string
+}
