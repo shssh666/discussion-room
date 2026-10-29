@@ -19,7 +19,15 @@ app.innerHTML = `
     </section>
     <section class="panel" id="demo-panel">
       <h2>演示区</h2>
-      <p class="hint">图片 / PDF / PPT 展示 · PR#4 接入</p>
+      <div class="upload-area">
+        <input type="file" id="file-input" accept=".png,.jpg,.jpeg,.gif,.pdf,.pptx,.svg" />
+        <button id="upload-btn" disabled>上传</button>
+        <span id="upload-status" class="hint"></span>
+      </div>
+      <div id="file-list" class="file-list"></div>
+      <div id="preview-area" class="preview-area">
+        <p class="hint">选择文件预览 · PR#4 接入完整展示</p>
+      </div>
     </section>
   </main>
 `
@@ -102,3 +110,51 @@ function appendSystem(reason: string) {
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
 }
+
+// === 文件上传 ===
+const fileInput = document.getElementById('file-input') as HTMLInputElement
+const uploadBtn = document.getElementById('upload-btn') as HTMLButtonElement
+const uploadStatus = document.getElementById('upload-status')!
+const fileList = document.getElementById('file-list')!
+
+uploadBtn.addEventListener('click', async () => {
+  const file = fileInput.files?.[0]
+  if (!file) return
+  uploadBtn.disabled = true
+  uploadStatus.textContent = '上传中…'
+  try {
+    const form = new FormData()
+    form.append('file', file)
+    const res = await fetch('/upload', { method: 'POST', body: form })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }))
+      uploadStatus.textContent = `失败: ${(err as { error: string }).error}`
+      return
+    }
+    uploadStatus.textContent = '上传成功'
+    fileInput.value = ''
+    refreshFileList()
+  } catch (e) {
+    uploadStatus.textContent = `错误: ${e instanceof Error ? e.message : '未知'}`
+  } finally {
+    uploadBtn.disabled = false
+  }
+})
+
+async function refreshFileList() {
+  try {
+    const res = await fetch('/files')
+    const files = (await res.json()) as Array<{ name: string; size: number }>
+    fileList.innerHTML = files
+      .map(
+        (f) =>
+          `<a href="/files/${encodeURIComponent(f.name)}" target="_blank" class="file-item">${escapeHtml(f.name)} (${(f.size / 1024).toFixed(1)}KB)</a>`,
+      )
+      .join('')
+    if (files.length === 0) fileList.innerHTML = '<p class="hint">暂无文件</p>'
+  } catch {
+    fileList.innerHTML = '<p class="hint">加载失败</p>'
+  }
+}
+
+refreshFileList()

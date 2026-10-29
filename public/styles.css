@@ -158,3 +158,59 @@ body {
 .badge.online {
   background: #22c55e;
 }
+
+/* 演示区上传 */
+.upload-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.upload-area input[type='file'] {
+  flex: 1;
+  font-size: 12px;
+}
+
+.upload-area button {
+  padding: 4px 12px;
+  border: none;
+  background: #2563eb;
+  color: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.upload-area button:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+.file-list {
+  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.file-item {
+  font-size: 12px;
+  color: #2563eb;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.file-item:hover {
+  text-decoration: underline;
+}
+
+.preview-area {
+  flex: 1;
+  padding: 14px;
+  min-height: 0;
+  overflow: auto;
+}
