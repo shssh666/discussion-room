@@ -1,0 +1,20 @@
+name: ci
+
+on: [pull_request, push]
+
+jobs:
+  check:
+    # 注：P1 装 hermes 自托管 runner 后切到 runs-on: [self-hosted]
+    # 切换前用 GitHub-hosted 跑纯静态检查（不依赖 PG）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build

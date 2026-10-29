@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: crdb
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
+      POSTGRES_DB: crdb
+    secrets:
+      - pg_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./pg-init.sql:/docker-entrypoint-initdb.d/10-tables.sql:ro
+    ports:
+      - "127.0.0.1:5432:5432"   # 只绑本机：自托管 runner 同机访问，不对公网暴露
+    # hermes 只有 1.9G 内存，压一压
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "max_connections=30"]
+
+volumes:
+  pgdata:
+
+secrets:
+  pg_password:
+    file: ./pg_password   # 部署时在服务器上生成（openssl rand -base64 24，权限 600），不进仓库
