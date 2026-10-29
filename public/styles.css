@@ -1,0 +1,74 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: #f5f6f8;
+  color: #222;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #1f2937;
+  color: #fff;
+}
+
+.topbar h1 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.badge {
+  font-size: 12px;
+  background: #6b7280;
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+
+.layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(260px, 2fr) 3fr;
+  gap: 12px;
+  padding: 12px;
+  min-height: 0;
+}
+
+.panel {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.panel h2 {
+  font-size: 13px;
+  margin: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e5e7eb;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.hint {
+  margin: auto;
+  color: #9ca3af;
+  font-size: 13px;
+}

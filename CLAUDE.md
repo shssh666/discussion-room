@@ -7,11 +7,11 @@
 
 ## 栈
 
-- Node.js 22 + TypeScript（strict）
+- Node.js 24 + TypeScript（strict）
 - 后端：Fastify + ws（WebSocket）
-- 前端：Vite + 原生 TS（不引框架，除非 PR 明确说明理由）
+- 前端：原生 TS，tsc 直出（无打包器；PR#1 起零原生依赖，适配 Android/CI）
 - 数据库：PostgreSQL（hermes，与插件指标库同实例、独立库 `room`）
-- 工具链：pnpm · vitest · eslint + prettier
+- 工具链：npm · node:test · eslint + prettier
 
 ## 约定
 
@@ -29,7 +29,7 @@
 ## 验证方式（提 PR 前必须跑，输出贴进 PR）
 
 ```
-pnpm lint && pnpm typecheck && pnpm test && pnpm build
+npm run lint && npm run typecheck && npm test && npm run build
 ```
 
-涉及 WebSocket 的改动另跑 `pnpm test:e2e` 并贴输出。
+涉及 WebSocket 的改动另跑 `npm run test:e2e` 并贴输出（PR#2 提供）。
