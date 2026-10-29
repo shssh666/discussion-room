@@ -10,7 +10,7 @@
     "dev": "node --watch src/server/index.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node test/app.test.ts",
+    "test": "node scripts/build.mjs && node test/app.test.ts",
     "build": "node scripts/build.mjs",
     "start": "node dist/server/index.js"
   },
