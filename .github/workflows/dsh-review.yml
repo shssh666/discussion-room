@@ -45,3 +45,4 @@ jobs:
           isolation: docker
           natural-language-write: "false"
           allow-write: "false"
+          timeout-minutes: 25
