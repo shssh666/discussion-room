@@ -4,6 +4,7 @@ import fastify from 'fastify'
 import fastifyStatic from '@fastify/static'
 import { WebSocketServer } from 'ws'
 import { Room } from './room.ts'
+import uploadPlugin from './upload.ts'
 import { MsgType, type WsMessage } from '../shared/protocol.ts'
 
 export interface AppOptions {
@@ -28,6 +29,9 @@ export function buildApp(opts: AppOptions) {
   app.register(fastifyStatic, { root: opts.publicDir, prefix: '/' })
   app.register(fastifyStatic, { root: opts.webDir, prefix: '/js/', decorateReply: false })
   app.register(fastifyStatic, { root: opts.sharedDir, prefix: '/shared/', decorateReply: false })
+
+  // 文件上传下载（流式处理，不整体读入内存）
+  app.register(uploadPlugin)
 
   app.get('/healthz', async () => ({ ok: true, ts: Date.now() }))
 
