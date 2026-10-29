@@ -35,7 +35,7 @@ export function buildApp(opts: AppOptions) {
   const room = new Room('default')
 
   // 直接用 ws 库处理 upgrade，绕过 @fastify/websocket 封装问题
-  const wss = new WebSocketServer({ noServer: true })
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 }) // 64KB 帧上限
   app.server.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url || '/', 'http://localhost')
     if (url.pathname !== '/ws') {
@@ -61,13 +61,23 @@ export function buildApp(opts: AppOptions) {
         if (!clientId) return
         let parsed: WsMessage
         try {
-          parsed = JSON.parse(Buffer.isBuffer(raw) ? raw.toString() : new TextDecoder().decode(raw as ArrayBuffer))
+          const str = Buffer.isBuffer(raw) ? raw.toString() : new TextDecoder().decode(raw as ArrayBuffer)
+          parsed = JSON.parse(str)
         } catch {
-          return
+          return // 非法 JSON 静默丢弃
         }
-        if (parsed.type === MsgType.chat && typeof (parsed.payload as { text?: string }).text === 'string') {
-          void room.sendChat(clientId, (parsed.payload as { text: string }).text)
+        // 防御：payload 为 null/非对象时不崩溃
+        if (!parsed || typeof parsed !== 'object') return
+        if (parsed.type === MsgType.chat && parsed.payload && typeof (parsed.payload as { text?: string }).text === 'string') {
+          const text = (parsed.payload as { text: string }).text
+          // 大小上限：单条消息最大 10KB，防 OOM
+          if (text.length > 10_000) return
+          void room.sendChat(clientId, text)
         }
+      })
+
+      ws.on('error', () => {
+        // 协议错误静默处理，close 事件会跟进清理
       })
 
       ws.on('close', () => {
