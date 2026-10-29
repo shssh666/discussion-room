@@ -189,9 +189,13 @@ let currentPage = 0
 fileList.addEventListener('click', (e) => {
   const a = (e.target as HTMLElement).closest('.file-item') as HTMLAnchorElement | null
   if (!a) return
-  e.preventDefault()
   const name = decodeURIComponent(a.getAttribute('href')?.replace('/files/', '') || '')
-  showDemo(name, undefined, undefined)
+  const ext = name.split('.').pop()?.toLowerCase() || ''
+  // 可预览的文件拦截默认行为做本地预览；其他文件（如 .pptx）放行让浏览器下载
+  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'pdf'].includes(ext)) {
+    e.preventDefault()
+    showDemo(name, undefined, undefined)
+  }
 })
 
 function showDemo(file: string, page?: number, presenter?: string) {
@@ -209,10 +213,11 @@ function showDemo(file: string, page?: number, presenter?: string) {
     previewImg.style.display = 'block'
     demoControls.style.display = 'none'
   } else if (ext === 'pdf') {
-    previewPdf.src = url
+    const pageFragment = (page ?? 0) > 0 ? `#page=${(page ?? 0) + 1}` : ''
+    previewPdf.src = url + pageFragment
     previewPdf.style.display = 'block'
     demoControls.style.display = 'flex'
-    pageInfo.textContent = presenter ? `${presenter} 正在演示` : 'PDF 预览'
+    pageInfo.textContent = presenter ? `${presenter} 正在演示 · 第 ${(page ?? 0) + 1} 页` : 'PDF 预览'
   } else {
     previewHint.textContent = `${file}（暂不支持预览，点击下载）`
     previewHint.style.display = 'block'
@@ -233,9 +238,15 @@ presentBtn.addEventListener('click', () => {
 prevBtn.addEventListener('click', () => {
   currentPage = Math.max(0, currentPage - 1)
   pageInfo.textContent = `第 ${currentPage + 1} 页`
+  if (currentFile.endsWith('.pdf')) {
+    previewPdf.src = `/files/${encodeURIComponent(currentFile)}#page=${currentPage + 1}`
+  }
 })
 
 nextBtn.addEventListener('click', () => {
   currentPage++
   pageInfo.textContent = `第 ${currentPage + 1} 页`
+  if (currentFile.endsWith('.pdf')) {
+    previewPdf.src = `/files/${encodeURIComponent(currentFile)}#page=${currentPage + 1}`
+  }
 })
