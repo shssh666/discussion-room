@@ -7,6 +7,7 @@ import { WebSocketServer } from 'ws'
 import { RoomRegistry } from './room.ts'
 import uploadPlugin from './upload.ts'
 import convertPlugin from './convert.ts'
+import pipelinePlugin from './pipeline.ts'
 import { MsgType, sanitizeRoomId, type WsMessage } from '../shared/protocol.ts'
 
 export interface AppOptions {
@@ -47,6 +48,8 @@ export function buildApp(opts: AppOptions) {
   app.register(uploadPlugin)
   // PPT 转换（即起即灭容器，并发=1，120s 超时）
   app.register(convertPlugin)
+  // 流水线状态 JSON（M5 看板数据层 + AI 可读）
+  app.register(pipelinePlugin)
 
   app.get('/healthz', async () => ({ ok: true, ts: Date.now() }))
 
@@ -67,6 +70,12 @@ export function buildApp(opts: AppOptions) {
       const name = url.searchParams.get('name')?.trim() || `user-${Math.random().toString(36).slice(2, 6)}`
       const roomId = sanitizeRoomId(url.searchParams.get('room'))
       const room = registry.getOrCreate(roomId)
+      if (!room) {
+        const msg: WsMessage = { type: MsgType.system, payload: { reason: 'too many rooms' }, ts: Date.now() }
+        ws.send(JSON.stringify(msg))
+        ws.close()
+        return
+      }
       let clientId: string | null = null
 
       room

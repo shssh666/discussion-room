@@ -145,18 +145,22 @@ export class RoomRegistry {
   private rooms = new Map<string, Room>()
   private gcTimers = new Map<string, ReturnType<typeof setTimeout>>()
   readonly gcDelayMs: number
+  readonly maxRooms: number
 
-  constructor(gcDelayMs = 60_000) {
+  constructor(gcDelayMs = 60_000, maxRooms = 100) {
     this.gcDelayMs = gcDelayMs
+    this.maxRooms = maxRooms
   }
 
   get(id: string): Room | undefined {
     return this.rooms.get(id)
   }
 
-  getOrCreate(id: string, maxUsers?: number): Room {
+  /** 房间数达上限且该房不存在时返回 null（调用方拒绝连接），防无限开房耗尽内存 */
+  getOrCreate(id: string, maxUsers?: number): Room | null {
     let room = this.rooms.get(id)
     if (!room) {
+      if (this.rooms.size >= this.maxRooms) return null
       room = new Room(id, maxUsers)
       this.rooms.set(id, room)
     }

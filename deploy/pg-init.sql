@@ -28,7 +28,7 @@ CREATE TABLE review_runs (
   id              bigserial PRIMARY KEY,
   pr_id           bigint NOT NULL REFERENCES prs(id),
   reviewer_version text NOT NULL,
-  mode            text NOT NULL CHECK (mode IN ('quick','standard','deep')),
+  mode            text NOT NULL CHECK (mode IN ('quick','standard','deep','m2')),
   round           int NOT NULL DEFAULT 1,
   ts              timestamptz NOT NULL DEFAULT now()
 );
@@ -41,7 +41,9 @@ CREATE TABLE findings (
   severity     finding_severity NOT NULL,
   body         text NOT NULL,
   status       finding_status NOT NULL DEFAULT 'posted',
-  status_updated_at timestamptz
+  status_updated_at timestamptz,
+  category     text,          -- M2 八类问题分类（v1 新增）
+  m2_severity  text           -- M2 原始 high/medium/low（v1 新增）
 );
 
 CREATE TABLE approvals (
