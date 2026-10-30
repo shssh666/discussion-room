@@ -136,3 +136,55 @@ function safeSend(socket: WebSocket, msg: WsMessage): void {
     // swallow — client already gone
   }
 }
+
+/**
+ * RoomRegistry：多房间管理。房间按需创建，空房间延迟回收。
+ * 回收走串行队列外的简单 setTimeout（房间无状态，回收只是删 Map 条目）。
+ */
+export class RoomRegistry {
+  private rooms = new Map<string, Room>()
+  private gcTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  readonly gcDelayMs: number
+
+  constructor(gcDelayMs = 60_000) {
+    this.gcDelayMs = gcDelayMs
+  }
+
+  get(id: string): Room | undefined {
+    return this.rooms.get(id)
+  }
+
+  getOrCreate(id: string, maxUsers?: number): Room {
+    let room = this.rooms.get(id)
+    if (!room) {
+      room = new Room(id, maxUsers)
+      this.rooms.set(id, room)
+    }
+    // 有人进来就取消回收
+    const t = this.gcTimers.get(id)
+    if (t) {
+      clearTimeout(t)
+      this.gcTimers.delete(id)
+    }
+    return room
+  }
+
+  /** 房间空了之后安排回收；gcDelay 内有人进来则取消 */
+  scheduleGC(id: string): void {
+    if (this.gcTimers.has(id)) return
+    const t = setTimeout(() => {
+      const room = this.rooms.get(id)
+      if (room && room.userCount === 0) {
+        this.rooms.delete(id)
+      }
+      this.gcTimers.delete(id)
+    }, this.gcDelayMs)
+    // 不阻塞进程退出
+    if (typeof t === 'object' && 'unref' in t) t.unref()
+    this.gcTimers.set(id, t)
+  }
+
+  list(): Array<{ id: string; users: number }> {
+    return [...this.rooms.entries()].map(([id, r]) => ({ id, users: r.userCount }))
+  }
+}

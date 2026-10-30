@@ -4,15 +4,16 @@ import { createRequire } from 'node:module'
 import fastify from 'fastify'
 import fastifyStatic from '@fastify/static'
 import { WebSocketServer } from 'ws'
-import { Room } from './room.ts'
+import { RoomRegistry } from './room.ts'
 import uploadPlugin from './upload.ts'
 import convertPlugin from './convert.ts'
-import { MsgType, type WsMessage } from '../shared/protocol.ts'
+import { MsgType, sanitizeRoomId, type WsMessage } from '../shared/protocol.ts'
 
 export interface AppOptions {
   publicDir: string
   webDir: string
   sharedDir: string
+  gcDelayMs?: number
 }
 
 /** 构建产物存在用 dist，否则回退源码目录（dev 模式页面需先 build 一次） */
@@ -49,8 +50,10 @@ export function buildApp(opts: AppOptions) {
 
   app.get('/healthz', async () => ({ ok: true, ts: Date.now() }))
 
-  // 单房间 MVP；后续 PR#7 做多房间管理
-  const room = new Room('default')
+  // 多房间管理：房间按需创建，空房延迟回收（PR#7）
+  const registry = new RoomRegistry(opts.gcDelayMs)
+
+  app.get('/rooms', async () => registry.list())
 
   // 直接用 ws 库处理 upgrade，绕过 @fastify/websocket 封装问题
   const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 }) // 64KB 帧上限
@@ -62,6 +65,8 @@ export function buildApp(opts: AppOptions) {
     }
     wss.handleUpgrade(request, socket, head, (ws) => {
       const name = url.searchParams.get('name')?.trim() || `user-${Math.random().toString(36).slice(2, 6)}`
+      const roomId = sanitizeRoomId(url.searchParams.get('room'))
+      const room = registry.getOrCreate(roomId)
       let clientId: string | null = null
 
       room
@@ -102,7 +107,13 @@ export function buildApp(opts: AppOptions) {
       })
 
       ws.on('close', () => {
-        if (clientId) void room.leave(clientId)
+        if (clientId) {
+          // leave 失败也要安排回收，否则房间泄漏（M2 finding）
+          void room.leave(clientId).then(
+            () => registry.scheduleGC(roomId),
+            () => registry.scheduleGC(roomId),
+          )
+        }
       })
     })
   })
