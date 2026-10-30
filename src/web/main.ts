@@ -238,7 +238,7 @@ function showDemo(file: string, page?: number, presenter?: string) {
     demoControls.style.display = 'none'
   } else if (ext === 'mmd') {
     currentPrefix = '/files/'
-    demoControls.style.display = 'none'
+    demoControls.style.display = 'flex' // 保留控制栏：mmd 也要能广播同步
     void renderMermaid(file)
   } else {
     previewHint.textContent = `${file}（暂不支持预览，点击下载）`
@@ -303,7 +303,7 @@ nextBtn.addEventListener('click', () => {
 
 // === mermaid 流程图渲染 ===
 let mermaidReady: Promise<MermaidLike> | null = null
-let mermaidRendering = false
+let mermaidRenderGen = 0 // 世代计数：只允许最新一次渲染提交 DOM，防旧图覆盖新预览
 
 interface MermaidLike {
   initialize(cfg: Record<string, unknown>): void
@@ -323,13 +323,16 @@ function loadMermaid(): Promise<MermaidLike> {
       s.onerror = () => reject(new Error('mermaid 脚本加载失败'))
       document.head.appendChild(s)
     })
+    // 加载失败不缓存 rejected：下次调用重试
+    mermaidReady.catch(() => {
+      mermaidReady = null
+    })
   }
   return mermaidReady
 }
 
 async function renderMermaid(file: string) {
-  if (mermaidRendering) return // 渲染串行化：忽略并发渲染请求
-  mermaidRendering = true
+  const gen = ++mermaidRenderGen
   try {
     const srcRes = await fetch(`/files/${encodeURIComponent(file)}`)
     if (!srcRes.ok) throw new Error('读取源文件失败')
@@ -339,16 +342,16 @@ async function renderMermaid(file: string) {
     // strict：禁用 mermaid 内的交互回调与 html 标签，防 XSS
     m.initialize({ startOnLoad: false, securityLevel: 'strict' })
     const { svg } = await m.render(`mermaid-${Date.now()}`, code)
+    if (gen !== mermaidRenderGen) return // 已有更新的渲染请求，丢弃过期结果
     // mermaid securityLevel:'strict' 内部经 DOMPurify 净化其生成的 SVG；
     // 此处 innerHTML 只接受 mermaid 自身渲染产物，不含任何用户原始 HTML
     mermaidBox.innerHTML = svg
     mermaidBox.style.display = 'block'
     previewHint.style.display = 'none'
   } catch (e) {
+    if (gen !== mermaidRenderGen) return
     mermaidBox.style.display = 'none'
     previewHint.textContent = `${file}（mermaid 渲染失败：${e instanceof Error ? e.message : '未知'}）`
     previewHint.style.display = 'block'
-  } finally {
-    mermaidRendering = false
   }
 }

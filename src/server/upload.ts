@@ -37,6 +37,7 @@ async function uploadPlugin(app: FastifyInstance): Promise<void> {
 
     const chunks: Buffer[] = []
     let totalSize = 0
+    let nulSeen = false
     const savedName = `${crypto.randomUUID()}${ext}`
     const dest = path.join(UPLOAD_DIR, savedName)
     const ws = createWriteStream(dest)
@@ -45,6 +46,7 @@ async function uploadPlugin(app: FastifyInstance): Promise<void> {
     try {
       for await (const chunk of file.file) {
         totalSize += chunk.length
+        if (ext === '.mmd' && !nulSeen && chunk.includes(0)) nulSeen = true // 全文扫描 NUL，不只首 chunk
         if (totalSize > MAX_FILE_SIZE) {
           sizeExceeded = true
           ws.destroy()
@@ -85,8 +87,8 @@ async function uploadPlugin(app: FastifyInstance): Promise<void> {
           return reply.status(415).send({ error: 'MIME mismatch' })
         }
       }
-      // 纯文本格式（.mmd）拒绝二进制内容（NUL 字节）
-      if (ext === '.mmd' && head.includes(0)) {
+      // 纯文本格式（.mmd）拒绝二进制内容（全文 NUL 扫描）
+      if (ext === '.mmd' && nulSeen) {
         try { unlinkSync(dest) } catch { /* ignore */ }
         return reply.status(415).send({ error: 'binary content not allowed for .mmd' })
       }
