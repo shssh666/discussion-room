@@ -8,4 +8,5 @@ function readInt(name: string, fallback: number): number {
 export const config = {
   port: readInt('PORT', 3000),
   host: process.env['HOST'] ?? '127.0.0.1',
+  pgDsn: process.env['PG_DSN'] ?? '',
 }

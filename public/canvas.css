@@ -1,0 +1,129 @@
+#hud {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #1f2937;
+  color: #fff;
+  font-family: system-ui, sans-serif;
+  font-size: 13px;
+}
+
+.hud-chip {
+  background: #374151;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.hud-hint {
+  color: #9ca3af;
+  font-size: 11px;
+}
+
+.hud-link {
+  margin-left: auto;
+  color: #93c5fd;
+  text-decoration: none;
+}
+
+#viewport {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #111827;
+  cursor: grab;
+}
+
+#viewport.panning {
+  cursor: grabbing;
+}
+
+#world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  transform-origin: 0 0;
+}
+
+#edges {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.node {
+  position: absolute;
+  min-width: 150px;
+  max-width: 220px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #1f2937;
+  border: 1px solid #374151;
+  color: #e5e7eb;
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  cursor: grab;
+  user-select: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.node:active {
+  cursor: grabbing;
+}
+
+.node .n-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.node .n-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.node .n-sub {
+  color: #9ca3af;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.node.kind-stage {
+  border-color: #4b5563;
+  background: #111827;
+}
+
+.node.kind-pr {
+  background: #1e293b;
+}
+
+.node.kind-cat {
+  background: #292524;
+}
+
+.node.kind-engine {
+  background: #172554;
+  border-color: #1e40af;
+}
+
+.dot-ok { background: #22c55e; }
+.dot-warn { background: #f59e0b; }
+.dot-fail { background: #ef4444; }
+.dot-idle { background: #6b7280; }
+.dot-high { background: #ef4444; }
+.dot-med { background: #f59e0b; }
+.dot-low { background: #9ca3af; }
