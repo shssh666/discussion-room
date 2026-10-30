@@ -31,6 +31,8 @@ const hudStore = document.getElementById('hud-store')!
 const view = { x: 60, y: 80, scale: 1 }
 let nodes: Node[] = []
 let edges: Array<[string, string]> = []
+// 用户手动拖拽过的位置，刷新时保留（不被布局公式覆盖）
+const userPos = new Map<string, { x: number; y: number }>()
 
 function applyView() {
   world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`
@@ -98,6 +100,15 @@ function buildGraph(data: Pipeline) {
       y: (H + 40) * 2 + row * (H - 20),
     })
   })
+
+  // 恢复用户拖拽过的位置
+  for (const n of nodes) {
+    const u = userPos.get(n.id)
+    if (u) {
+      n.x = u.x
+      n.y = u.y
+    }
+  }
 }
 
 function render() {
@@ -151,6 +162,7 @@ let dragNode: { id: string; ox: number; oy: number } | null = null
 let last = { x: 0, y: 0 }
 
 viewport.addEventListener('mousedown', (e) => {
+  e.preventDefault() // 防原生文本选择/拖拽干扰
   const nodeEl = (e.target as HTMLElement).closest('.node') as HTMLElement | null
   if (nodeEl) {
     const n = nodes.find((x) => x.id === nodeEl.dataset.id)
@@ -170,6 +182,7 @@ window.addEventListener('mousemove', (e) => {
     if (!n) return
     n.x = last.x + (e.clientX - dragNode.ox) / view.scale
     n.y = last.y + (e.clientY - dragNode.oy) / view.scale
+    userPos.set(n.id, { x: n.x, y: n.y })
     const el = world.querySelector(`.node[data-id="${n.id}"]`) as HTMLElement | null
     if (el) {
       el.style.left = `${n.x}px`

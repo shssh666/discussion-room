@@ -44,6 +44,16 @@ function waitFor(messages: WsMessage[], type: MsgType, timeoutMs = 2000): Promis
   })
 }
 
+/** 轮询直到条件成立或超时，替代固定 sleep，降低 CI 时序脆弱性 */
+async function waitUntil(fn: () => Promise<boolean>, timeoutMs = 2000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (await fn()) return true
+    await new Promise((r) => setTimeout(r, 50))
+  }
+  return false
+}
+
 test('不同房间消息隔离', async (t) => {
   const port = nextPort()
   const app = await startServer(port)
@@ -120,11 +130,13 @@ test('空房延迟回收（真验证回收发生）', async (t) => {
 
   // 延迟内：房间还在（users=0）
   await new Promise((r) => setTimeout(r, 100))
-  let rooms = (await (await fetch(`http://127.0.0.1:${port}/rooms`)).json()) as Array<{ id: string; users: number }>
+  const rooms = (await (await fetch(`http://127.0.0.1:${port}/rooms`)).json()) as Array<{ id: string; users: number }>
   assert.ok(rooms.some((r) => r.id === 'gcRoom'), '延迟期内房间应仍存在')
 
-  // 超过 gcDelay：房间应被回收
-  await new Promise((r) => setTimeout(r, 500))
-  rooms = (await (await fetch(`http://127.0.0.1:${port}/rooms`)).json()) as Array<{ id: string; users: number }>
-  assert.ok(!rooms.some((r) => r.id === 'gcRoom'), '超过 gcDelay 后空房应被回收')
+  // 超过 gcDelay：轮询等待回收发生（避免固定 sleep 的时序脆弱）
+  const gone = await waitUntil(async () => {
+    const rs = (await (await fetch(`http://127.0.0.1:${port}/rooms`)).json()) as Array<{ id: string }>
+    return !rs.some((r) => r.id === 'gcRoom')
+  }, 3000)
+  assert.ok(gone, '超过 gcDelay 后空房应被回收')
 })

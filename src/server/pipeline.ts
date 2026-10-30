@@ -43,20 +43,35 @@ const EMPTY: PipelineJSON = {
 
 async function pipelinePlugin(app: FastifyInstance): Promise<void> {
   let pool: import('pg').Pool | null = null
+  let poolInit: Promise<import('pg').Pool | null> | null = null // 单飞：并发请求共用一次初始化
+  let lastFail = 0
+  const RETRY_COOLDOWN = 30_000 // PG 短暂不可用时 30s 内不重试，避免每请求新建池
 
   async function getPool() {
     if (pool) return pool
-    const dsn = process.env.PG_DSN
-    if (!dsn) return null
-    try {
-      const pg = (await import('pg')).default
-      pool = new pg.Pool({ connectionString: dsn, connectionTimeoutMillis: 2000, max: 2 })
-      await pool.query('select 1')
-      return pool
-    } catch {
-      pool = null
-      return null
+    if (Date.now() - lastFail < RETRY_COOLDOWN) return null
+    if (!poolInit) {
+      poolInit = (async () => {
+        const dsn = process.env.PG_DSN
+        if (!dsn) return null
+        let p: import('pg').Pool | null = null
+        try {
+          const pg = (await import('pg')).default
+          p = new pg.Pool({ connectionString: dsn, connectionTimeoutMillis: 2000, max: 2 })
+          await p.query('select 1')
+          pool = p
+          return p
+        } catch {
+          if (p) await p.end().catch(() => {}) // 失败的池要 end，防连接泄漏
+          pool = null
+          lastFail = Date.now()
+          return null
+        } finally {
+          poolInit = null
+        }
+      })()
     }
+    return poolInit
   }
 
   app.get('/api/pipeline', async (_req: FastifyRequest, reply: FastifyReply) => {

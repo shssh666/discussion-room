@@ -70,6 +70,12 @@ export function buildApp(opts: AppOptions) {
       const name = url.searchParams.get('name')?.trim() || `user-${Math.random().toString(36).slice(2, 6)}`
       const roomId = sanitizeRoomId(url.searchParams.get('room'))
       const room = registry.getOrCreate(roomId)
+      if (!room) {
+        const msg: WsMessage = { type: MsgType.system, payload: { reason: 'too many rooms' }, ts: Date.now() }
+        ws.send(JSON.stringify(msg))
+        ws.close()
+        return
+      }
       let clientId: string | null = null
 
       room
