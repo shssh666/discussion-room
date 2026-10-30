@@ -95,3 +95,30 @@ test('并发转换被拒（409）', async (t) => {
   // 一个成功(200)，一个 409（fake delay 500ms 保证窗口）
   assert.deepEqual(codes, [200, 409], `got ${codes}`)
 })
+
+test('客户端断开 → 转换中止、串行锁释放', async (t) => {
+  const port = nextPort()
+  const app = await startServer(port)
+  t.after(() => app.close())
+
+  const name = await uploadPptx(port)
+  const client = new AbortController()
+  const first = fetch(`http://127.0.0.1:${port}/convert`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name }),
+    signal: client.signal,
+  }).catch(() => null) // 客户端主动断开
+  await new Promise((r) => setTimeout(r, 200))
+  client.abort()
+  await first
+  await new Promise((r) => setTimeout(r, 300)) // 等服务端 abort 清理
+
+  // 锁应已释放：第二次转换不再 409
+  const second = await fetch(`http://127.0.0.1:${port}/convert`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+  assert.notEqual(second.status, 409, '串行锁未释放')
+})

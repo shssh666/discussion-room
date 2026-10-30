@@ -68,11 +68,20 @@ export const dockerConverter: Converter = {
   },
 }
 
-/** e2e 用假转换器 */
+/** e2e 用假转换器（尊重 signal，保证 abort 路径可测） */
 export const fakeConverter: Converter = {
-  async convert(_src, dest) {
+  async convert(_src, dest, signal) {
     const delay = Number(process.env.CR_FAKE_DELAY || 0)
-    if (delay > 0) await new Promise((r) => setTimeout(r, delay))
+    if (delay > 0) {
+      await new Promise<void>((resolve, reject) => {
+        const t = setTimeout(resolve, delay)
+        signal.addEventListener('abort', () => {
+          clearTimeout(t)
+          reject(new Error('aborted'))
+        }, { once: true })
+      })
+    }
+    if (signal.aborted) throw new Error('aborted')
     writeFileSync(dest, '%PDF-1.4\n% fake converted\n')
   },
 }
@@ -82,6 +91,7 @@ export function getConverter(): Converter {
 }
 
 let converting = false // 并发=1：转换是 CPU/内存密集，串行化
+let currentAbort: AbortController | null = null // 进程级：服务关闭时中止进行中的转换
 
 /** 缓存上限：超过 CACHE_MAX_FILES 按 mtime 删最旧，防 data/converted 无限增长 */
 function pruneCache(): void {
@@ -103,6 +113,11 @@ async function convertPlugin(app: FastifyInstance): Promise<void> {
   if (!existsSync(CONVERT_DIR)) mkdirSync(CONVERT_DIR, { recursive: true })
   const uploadDir = path.resolve('data/files')
 
+  // 服务关闭时中止进行中的转换（清理容器）
+  app.addHook('onClose', async () => {
+    currentAbort?.abort()
+  })
+
   app.post('/convert', async (req: FastifyRequest<{ Body: { name?: string } }>, reply: FastifyReply) => {
     const rawName = req.body?.name
     if (typeof rawName !== 'string') return reply.status(400).send({ error: 'name required' })
@@ -122,13 +137,26 @@ async function convertPlugin(app: FastifyInstance): Promise<void> {
     converting = true
     pruneCache()
     const ac = new AbortController()
+    currentAbort = ac
+    // 客户端中途断开 → 中止转换，释放串行锁
+    // 注意：req.raw 的 close 在 body 读完时就触发，不能用；
+    // 用 reply.raw 的 close + writableEnded 判别"响应未写完连接就断了"
+    let done = false
+    const onClientGone = () => {
+      if (!done && !reply.raw.writableEnded) ac.abort()
+    }
+    reply.raw.on('close', onClientGone)
     try {
       await getConverter().convert(src, dest, ac.signal)
       return reply.send({ pdf: outName, cached: false })
     } catch (err) {
+      if (ac.signal.aborted) return reply.status(500).send({ error: 'convert aborted (client gone)' })
       return reply.status(500).send({ error: `convert failed: ${(err as Error).message}` })
     } finally {
+      done = true
+      reply.raw.removeListener('close', onClientGone)
       converting = false
+      currentAbort = null
     }
   })
 
