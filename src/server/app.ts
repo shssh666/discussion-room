@@ -5,6 +5,7 @@ import fastifyStatic from '@fastify/static'
 import { WebSocketServer } from 'ws'
 import { Room } from './room.ts'
 import uploadPlugin from './upload.ts'
+import convertPlugin from './convert.ts'
 import { MsgType, type WsMessage } from '../shared/protocol.ts'
 
 export interface AppOptions {
@@ -32,6 +33,8 @@ export function buildApp(opts: AppOptions) {
 
   // 文件上传下载（流式处理，不整体读入内存）
   app.register(uploadPlugin)
+  // PPT 转换（即起即灭容器，并发=1，120s 超时）
+  app.register(convertPlugin)
 
   app.get('/healthz', async () => ({ ok: true, ts: Date.now() }))
 

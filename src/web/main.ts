@@ -27,6 +27,7 @@ app.innerHTML = `
       <div id="file-list" class="file-list"></div>
       <div id="preview-area" class="preview-area">
         <p class="hint" id="preview-hint">选择文件开始演示</p>
+        <button id="convert-btn" style="display:none">🔄 转换并预览</button>
         <img id="preview-img" style="display:none;max-width:100%;max-height:100%" />
         <iframe id="preview-pdf" style="display:none;width:100%;height:100%;border:none"></iframe>
       </div>
@@ -182,19 +183,21 @@ const pageInfo = document.getElementById('page-info')!
 const prevBtn = document.getElementById('prev-page')!
 const nextBtn = document.getElementById('next-page')!
 const presentBtn = document.getElementById('present-btn')!
+const convertBtn = document.getElementById('convert-btn') as HTMLButtonElement
 
 let currentFile = ''
 let currentPage = 0
+let currentPrefix = '/files/'
 
 fileList.addEventListener('click', (e) => {
   const a = (e.target as HTMLElement).closest('.file-item') as HTMLAnchorElement | null
   if (!a) return
   const name = decodeURIComponent(a.getAttribute('href')?.replace('/files/', '') || '')
   const ext = name.split('.').pop()?.toLowerCase() || ''
-  // 可预览的文件拦截默认行为做本地预览；其他文件（如 .pptx）放行让浏览器下载
-  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'pdf'].includes(ext)) {
+  // 可预览的文件拦截默认行为做本地预览；pptx 走转换流程；其他文件放行让浏览器下载
+  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'pdf', 'pptx'].includes(ext)) {
     e.preventDefault()
-    showDemo(name, undefined, undefined)
+    void showDemo(name, undefined, undefined)
   }
 })
 
@@ -204,20 +207,32 @@ function showDemo(file: string, page?: number, presenter?: string) {
   previewHint.style.display = 'none'
   previewImg.style.display = 'none'
   previewPdf.style.display = 'none'
+  convertBtn.style.display = 'none'
 
   const ext = file.split('.').pop()?.toLowerCase() || ''
-  const url = `/files/${encodeURIComponent(file)}`
 
   if (['png', 'jpg', 'jpeg', 'gif', 'svg'].includes(ext)) {
-    previewImg.src = url
+    currentPrefix = '/files/'
+    previewImg.src = `/files/${encodeURIComponent(file)}`
     previewImg.style.display = 'block'
     demoControls.style.display = 'none'
   } else if (ext === 'pdf') {
-    const pageFragment = (page ?? 0) > 0 ? `#page=${(page ?? 0) + 1}` : ''
-    previewPdf.src = url + pageFragment
-    previewPdf.style.display = 'block'
-    demoControls.style.display = 'flex'
-    pageInfo.textContent = presenter ? `${presenter} 正在演示 · 第 ${(page ?? 0) + 1} 页` : 'PDF 预览'
+    // 判别来源：上传的 pdf 在 /files/，转换产物在 /converted/
+    void (async () => {
+      const head = await fetch(`/files/${encodeURIComponent(file)}`, { method: 'HEAD' }).catch(() => null)
+      currentPrefix = head && head.ok ? '/files/' : '/converted/'
+      const pageFragment = (page ?? 0) > 0 ? `#page=${(page ?? 0) + 1}` : ''
+      previewPdf.src = currentPrefix + encodeURIComponent(file) + pageFragment
+      previewPdf.style.display = 'block'
+      demoControls.style.display = 'flex'
+      pageInfo.textContent = presenter ? `${presenter} 正在演示 · 第 ${(page ?? 0) + 1} 页` : 'PDF 预览'
+    })()
+  } else if (ext === 'pptx') {
+    currentPrefix = '/files/'
+    previewHint.textContent = `${file}（PPT · 点击转换后预览）`
+    previewHint.style.display = 'block'
+    convertBtn.style.display = 'inline-block'
+    demoControls.style.display = 'none'
   } else {
     previewHint.textContent = `${file}（暂不支持预览，点击下载）`
     previewHint.style.display = 'block'
@@ -229,6 +244,34 @@ function showDemo(file: string, page?: number, presenter?: string) {
   }
 }
 
+convertBtn.addEventListener('click', () => {
+  if (!currentFile) return
+  convertBtn.disabled = true
+  previewHint.textContent = '转换中…（首次转换可能需要几十秒）'
+  void (async () => {
+    try {
+      const res = await fetch('/convert', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: currentFile }),
+      })
+      if (res.status === 409) {
+        previewHint.textContent = '有其他转换正在进行，稍后再试'
+        return
+      }
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({ error: res.statusText }))) as { error: string }
+        previewHint.textContent = `转换失败: ${err.error}`
+        return
+      }
+      const { pdf } = (await res.json()) as { pdf: string }
+      void showDemo(pdf, 0, undefined)
+    } finally {
+      convertBtn.disabled = false
+    }
+  })()
+})
+
 presentBtn.addEventListener('click', () => {
   if (!currentFile) return
   ws.send(JSON.stringify({ type: MsgType.demo, payload: { file: currentFile, page: currentPage }, ts: Date.now() }))
@@ -239,7 +282,7 @@ prevBtn.addEventListener('click', () => {
   currentPage = Math.max(0, currentPage - 1)
   pageInfo.textContent = `第 ${currentPage + 1} 页`
   if (currentFile.endsWith('.pdf')) {
-    previewPdf.src = `/files/${encodeURIComponent(currentFile)}#page=${currentPage + 1}`
+    previewPdf.src = `${currentPrefix}${encodeURIComponent(currentFile)}#page=${currentPage + 1}`
   }
 })
 
@@ -247,6 +290,6 @@ nextBtn.addEventListener('click', () => {
   currentPage++
   pageInfo.textContent = `第 ${currentPage + 1} 页`
   if (currentFile.endsWith('.pdf')) {
-    previewPdf.src = `/files/${encodeURIComponent(currentFile)}#page=${currentPage + 1}`
+    previewPdf.src = `${currentPrefix}${encodeURIComponent(currentFile)}#page=${currentPage + 1}`
   }
 })

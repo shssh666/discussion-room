@@ -13,6 +13,7 @@
     "test": "node scripts/build.mjs && node test/app.test.ts",
     "test:e2e": "node scripts/build.mjs && node test/e2e-chat.test.ts",
     "test:e2e:upload": "node scripts/build.mjs && node test/e2e-upload.test.ts",
+    "test:e2e:convert": "node scripts/build.mjs && CR_CONVERT_MODE=fake CR_FAKE_DELAY=500 node test/e2e-convert.test.ts",
     "build": "node scripts/build.mjs",
     "start": "node dist/server/index.js"
   },
