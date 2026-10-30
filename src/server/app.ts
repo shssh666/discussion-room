@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs'
 import path from 'node:path'
+import { createRequire } from 'node:module'
 import fastify from 'fastify'
 import fastifyStatic from '@fastify/static'
 import { WebSocketServer } from 'ws'
@@ -30,6 +31,16 @@ export function buildApp(opts: AppOptions) {
   app.register(fastifyStatic, { root: opts.publicDir, prefix: '/' })
   app.register(fastifyStatic, { root: opts.webDir, prefix: '/js/', decorateReply: false })
   app.register(fastifyStatic, { root: opts.sharedDir, prefix: '/shared/', decorateReply: false })
+
+  // mermaid UMD 产物直供（无打包器约束下的 vendor 方案）
+  try {
+    const req = createRequire(import.meta.url)
+    const mermaidDist = path.join(path.dirname(req.resolve('mermaid/package.json')), 'dist')
+    app.register(fastifyStatic, { root: mermaidDist, prefix: '/js/vendor/', decorateReply: false })
+  } catch {
+    // mermaid 未安装时跳过 vendor 路由，前端降级为纯文本展示
+    console.warn('[vendor] mermaid dist 不可用，/js/vendor/ 路由未注册')
+  }
 
   // 文件上传下载（流式处理，不整体读入内存）
   app.register(uploadPlugin)

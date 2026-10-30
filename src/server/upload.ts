@@ -7,7 +7,7 @@ import fp from 'fastify-plugin'
 
 const UPLOAD_DIR = path.resolve('data/files')
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
-const ALLOWED_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.pdf', '.pptx', '.svg'])
+const ALLOWED_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.pdf', '.pptx', '.svg', '.mmd'])
 
 const MAGIC: Array<{ ext: string; bytes: number[] }> = [
   { ext: '.png', bytes: [0x89, 0x50, 0x4e, 0x47] },
@@ -17,6 +17,7 @@ const MAGIC: Array<{ ext: string; bytes: number[] }> = [
   { ext: '.pdf', bytes: [0x25, 0x50, 0x44, 0x46] },
   { ext: '.pptx', bytes: [0x50, 0x4b, 0x03, 0x04] },
   { ext: '.svg', bytes: [] },
+  { ext: '.mmd', bytes: [] }, // 纯文本 mermaid 源码，跳过 magic 校验
 ]
 
 async function uploadPlugin(app: FastifyInstance): Promise<void> {
@@ -36,6 +37,7 @@ async function uploadPlugin(app: FastifyInstance): Promise<void> {
 
     const chunks: Buffer[] = []
     let totalSize = 0
+    let nulSeen = false
     const savedName = `${crypto.randomUUID()}${ext}`
     const dest = path.join(UPLOAD_DIR, savedName)
     const ws = createWriteStream(dest)
@@ -44,6 +46,7 @@ async function uploadPlugin(app: FastifyInstance): Promise<void> {
     try {
       for await (const chunk of file.file) {
         totalSize += chunk.length
+        if (ext === '.mmd' && !nulSeen && chunk.includes(0)) nulSeen = true // 全文扫描 NUL，不只首 chunk
         if (totalSize > MAX_FILE_SIZE) {
           sizeExceeded = true
           ws.destroy()
@@ -83,6 +86,11 @@ async function uploadPlugin(app: FastifyInstance): Promise<void> {
           try { unlinkSync(dest) } catch { /* ignore */ }
           return reply.status(415).send({ error: 'MIME mismatch' })
         }
+      }
+      // 纯文本格式（.mmd）拒绝二进制内容（全文 NUL 扫描）
+      if (ext === '.mmd' && nulSeen) {
+        try { unlinkSync(dest) } catch { /* ignore */ }
+        return reply.status(415).send({ error: 'binary content not allowed for .mmd' })
       }
     }
 

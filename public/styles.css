@@ -246,3 +246,10 @@ body {
   color: #fff;
   border-color: #2563eb;
 }
+
+.mermaid-box {
+  max-width: 100%;
+  overflow: auto;
+  padding: 8px;
+  background: #fff;
+}

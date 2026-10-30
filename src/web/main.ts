@@ -20,7 +20,7 @@ app.innerHTML = `
     <section class="panel" id="demo-panel">
       <h2>演示区</h2>
       <div class="upload-area">
-        <input type="file" id="file-input" accept=".png,.jpg,.jpeg,.gif,.pdf,.pptx,.svg" />
+        <input type="file" id="file-input" accept=".png,.jpg,.jpeg,.gif,.pdf,.pptx,.svg,.mmd" />
         <button id="upload-btn" disabled>上传</button>
         <span id="upload-status" class="hint"></span>
       </div>
@@ -28,6 +28,7 @@ app.innerHTML = `
       <div id="preview-area" class="preview-area">
         <p class="hint" id="preview-hint">选择文件开始演示</p>
         <button id="convert-btn" style="display:none">🔄 转换并预览</button>
+        <div id="mermaid-box" class="mermaid-box" style="display:none"></div>
         <img id="preview-img" style="display:none;max-width:100%;max-height:100%" />
         <iframe id="preview-pdf" style="display:none;width:100%;height:100%;border:none"></iframe>
       </div>
@@ -184,6 +185,7 @@ const prevBtn = document.getElementById('prev-page')!
 const nextBtn = document.getElementById('next-page')!
 const presentBtn = document.getElementById('present-btn')!
 const convertBtn = document.getElementById('convert-btn') as HTMLButtonElement
+const mermaidBox = document.getElementById('mermaid-box')!
 
 let currentFile = ''
 let currentPage = 0
@@ -195,19 +197,21 @@ fileList.addEventListener('click', (e) => {
   const name = decodeURIComponent(a.getAttribute('href')?.replace('/files/', '') || '')
   const ext = name.split('.').pop()?.toLowerCase() || ''
   // 可预览的文件拦截默认行为做本地预览；pptx 走转换流程；其他文件放行让浏览器下载
-  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'pdf', 'pptx'].includes(ext)) {
+  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'pdf', 'pptx', 'mmd'].includes(ext)) {
     e.preventDefault()
     void showDemo(name, undefined, undefined)
   }
 })
 
 function showDemo(file: string, page?: number, presenter?: string) {
+  mermaidRenderGen++ // 切换任何预览都作废进行中的 mermaid 渲染，防旧 SVG 覆盖新预览
   currentFile = file
   currentPage = page ?? 0
   previewHint.style.display = 'none'
   previewImg.style.display = 'none'
   previewPdf.style.display = 'none'
   convertBtn.style.display = 'none'
+  mermaidBox.style.display = 'none'
 
   const ext = file.split('.').pop()?.toLowerCase() || ''
 
@@ -217,9 +221,11 @@ function showDemo(file: string, page?: number, presenter?: string) {
     previewImg.style.display = 'block'
     demoControls.style.display = 'none'
   } else if (ext === 'pdf') {
-    // 判别来源：上传的 pdf 在 /files/，转换产物在 /converted/
+    // 异步续体同样受世代守卫：HEAD 探测期间切换预览则丢弃本次提交
+    const gen = mermaidRenderGen
     void (async () => {
       const head = await fetch(`/files/${encodeURIComponent(file)}`, { method: 'HEAD' }).catch(() => null)
+      if (gen !== mermaidRenderGen) return
       currentPrefix = head && head.ok ? '/files/' : '/converted/'
       const pageFragment = (page ?? 0) > 0 ? `#page=${(page ?? 0) + 1}` : ''
       previewPdf.src = currentPrefix + encodeURIComponent(file) + pageFragment
@@ -233,6 +239,10 @@ function showDemo(file: string, page?: number, presenter?: string) {
     previewHint.style.display = 'block'
     convertBtn.style.display = 'inline-block'
     demoControls.style.display = 'none'
+  } else if (ext === 'mmd') {
+    currentPrefix = '/files/'
+    demoControls.style.display = 'flex' // 保留控制栏：mmd 也要能广播同步
+    void renderMermaid(file)
   } else {
     previewHint.textContent = `${file}（暂不支持预览，点击下载）`
     previewHint.style.display = 'block'
@@ -293,3 +303,59 @@ nextBtn.addEventListener('click', () => {
     previewPdf.src = `${currentPrefix}${encodeURIComponent(currentFile)}#page=${currentPage + 1}`
   }
 })
+
+// === mermaid 流程图渲染 ===
+let mermaidReady: Promise<MermaidLike> | null = null
+let mermaidRenderGen = 0 // 世代计数：只允许最新一次渲染提交 DOM，防旧图覆盖新预览
+// 不变量：任何异步预览提交（mermaid 渲染 / PDF HEAD 续体）在碰 DOM 前必须校验 gen === mermaidRenderGen
+
+interface MermaidLike {
+  initialize(cfg: Record<string, unknown>): void
+  render(id: string, code: string): Promise<{ svg: string }>
+}
+
+function loadMermaid(): Promise<MermaidLike> {
+  if (!mermaidReady) {
+    mermaidReady = new Promise((resolve, reject) => {
+      const s = document.createElement('script')
+      s.src = '/js/vendor/mermaid.min.js'
+      s.onload = () => {
+        const m = (window as unknown as { mermaid?: MermaidLike }).mermaid
+        if (m) resolve(m)
+        else reject(new Error('mermaid 全局对象缺失'))
+      }
+      s.onerror = () => reject(new Error('mermaid 脚本加载失败'))
+      document.head.appendChild(s)
+    })
+    // 加载失败不缓存 rejected：下次调用重试
+    mermaidReady.catch(() => {
+      mermaidReady = null
+    })
+  }
+  return mermaidReady
+}
+
+async function renderMermaid(file: string) {
+  const gen = ++mermaidRenderGen
+  try {
+    const srcRes = await fetch(`/files/${encodeURIComponent(file)}`)
+    if (!srcRes.ok) throw new Error('读取源文件失败')
+    const code = await srcRes.text()
+    if (code.length > 200_000) throw new Error('mermaid 源码过大')
+    const m = await loadMermaid()
+    // strict：禁用 mermaid 内的交互回调与 html 标签，防 XSS
+    m.initialize({ startOnLoad: false, securityLevel: 'strict' })
+    const { svg } = await m.render(`mermaid-${Date.now()}`, code)
+    if (gen !== mermaidRenderGen) return // 已有更新的渲染请求，丢弃过期结果
+    // mermaid securityLevel:'strict' 内部经 DOMPurify 净化其生成的 SVG；
+    // 此处 innerHTML 只接受 mermaid 自身渲染产物，不含任何用户原始 HTML
+    mermaidBox.innerHTML = svg
+    mermaidBox.style.display = 'block'
+    previewHint.style.display = 'none'
+  } catch (e) {
+    if (gen !== mermaidRenderGen) return
+    mermaidBox.style.display = 'none'
+    previewHint.textContent = `${file}（mermaid 渲染失败：${e instanceof Error ? e.message : '未知'}）`
+    previewHint.style.display = 'block'
+  }
+}
