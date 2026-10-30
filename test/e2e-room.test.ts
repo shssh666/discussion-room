@@ -107,9 +107,10 @@ test('/rooms 列出房间及人数', async (t) => {
   b.ws.close()
 })
 
-test('空房延迟回收', async (t) => {
+test('空房延迟回收（真验证回收发生）', async (t) => {
   const port = nextPort()
-  const app = buildApp(defaultDirs())
+  // 注入短回收延迟，真正验证"空房被删"而非仅"延迟内还在"
+  const app = buildApp({ ...defaultDirs(), gcDelayMs: 300 })
   await app.listen({ port, host: '127.0.0.1' })
   t.after(() => app.close())
 
@@ -117,12 +118,13 @@ test('空房延迟回收', async (t) => {
   await waitFor(a.messages, MsgType.presence)
   a.ws.close()
 
-  // 回收延迟 60s，这里用短等待确认"还没回收"再手动等回收不现实；
-  // 改为验证 close 后 scheduleGC 不报错且房间仍在（延迟内）
-  await new Promise((r) => setTimeout(r, 200))
-  const res = await fetch(`http://127.0.0.1:${port}/rooms`)
-  const rooms = (await res.json()) as Array<{ id: string; users: number }>
-  const target = rooms.find((r) => r.id === 'gcRoom')
-  assert.ok(target, '延迟期内房间应仍存在')
-  assert.equal(target!.users, 0)
+  // 延迟内：房间还在（users=0）
+  await new Promise((r) => setTimeout(r, 100))
+  let rooms = (await (await fetch(`http://127.0.0.1:${port}/rooms`)).json()) as Array<{ id: string; users: number }>
+  assert.ok(rooms.some((r) => r.id === 'gcRoom'), '延迟期内房间应仍存在')
+
+  // 超过 gcDelay：房间应被回收
+  await new Promise((r) => setTimeout(r, 500))
+  rooms = (await (await fetch(`http://127.0.0.1:${port}/rooms`)).json()) as Array<{ id: string; users: number }>
+  assert.ok(!rooms.some((r) => r.id === 'gcRoom'), '超过 gcDelay 后空房应被回收')
 })

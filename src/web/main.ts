@@ -1,4 +1,4 @@
-import { MsgType, type ChatPayload, type DemoPayload, type PresencePayload, type SystemPayload, type WsMessage } from '../shared/protocol.ts'
+import { MsgType, sanitizeRoomId, type ChatPayload, type DemoPayload, type PresencePayload, type SystemPayload, type WsMessage } from '../shared/protocol.ts'
 
 const app = document.querySelector<HTMLDivElement>('#app')
 if (!app) throw new Error('#app missing')
@@ -49,9 +49,7 @@ const input = document.getElementById('msg-input') as HTMLInputElement
 const sendBtn = form.querySelector('button')!
 
 const userName = prompt('你的昵称', `user-${Math.random().toString(36).slice(2, 6)}`) || 'anon'
-const roomId =
-  (new URLSearchParams(location.search).get('room') || 'default').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) ||
-  'default'
+const roomId = sanitizeRoomId(new URLSearchParams(location.search).get('room'))
 document.querySelector('.topbar h1')!.textContent = `讨论室 · ${roomId}`
 const protocol = location.protocol === 'https:' ? 'wss' : 'ws'
 
