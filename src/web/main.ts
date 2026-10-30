@@ -204,6 +204,7 @@ fileList.addEventListener('click', (e) => {
 })
 
 function showDemo(file: string, page?: number, presenter?: string) {
+  mermaidRenderGen++ // 切换任何预览都作废进行中的 mermaid 渲染，防旧 SVG 覆盖新预览
   currentFile = file
   currentPage = page ?? 0
   previewHint.style.display = 'none'
