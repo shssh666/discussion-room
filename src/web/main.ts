@@ -221,9 +221,11 @@ function showDemo(file: string, page?: number, presenter?: string) {
     previewImg.style.display = 'block'
     demoControls.style.display = 'none'
   } else if (ext === 'pdf') {
-    // 判别来源：上传的 pdf 在 /files/，转换产物在 /converted/
+    // 异步续体同样受世代守卫：HEAD 探测期间切换预览则丢弃本次提交
+    const gen = mermaidRenderGen
     void (async () => {
       const head = await fetch(`/files/${encodeURIComponent(file)}`, { method: 'HEAD' }).catch(() => null)
+      if (gen !== mermaidRenderGen) return
       currentPrefix = head && head.ok ? '/files/' : '/converted/'
       const pageFragment = (page ?? 0) > 0 ? `#page=${(page ?? 0) + 1}` : ''
       previewPdf.src = currentPrefix + encodeURIComponent(file) + pageFragment
@@ -305,6 +307,7 @@ nextBtn.addEventListener('click', () => {
 // === mermaid 流程图渲染 ===
 let mermaidReady: Promise<MermaidLike> | null = null
 let mermaidRenderGen = 0 // 世代计数：只允许最新一次渲染提交 DOM，防旧图覆盖新预览
+// 不变量：任何异步预览提交（mermaid 渲染 / PDF HEAD 续体）在碰 DOM 前必须校验 gen === mermaidRenderGen
 
 interface MermaidLike {
   initialize(cfg: Record<string, unknown>): void
