@@ -15,6 +15,7 @@
     "test:e2e:upload": "node scripts/build.mjs && node test/e2e-upload.test.ts",
     "test:e2e:convert": "node scripts/build.mjs && CR_CONVERT_MODE=fake CR_FAKE_DELAY=500 node test/e2e-convert.test.ts",
     "test:e2e:mermaid": "node scripts/build.mjs && node test/e2e-mermaid.test.ts",
+    "test:e2e:room": "node scripts/build.mjs && node test/e2e-room.test.ts",
     "build": "node scripts/build.mjs",
     "start": "node dist/server/index.js"
   },

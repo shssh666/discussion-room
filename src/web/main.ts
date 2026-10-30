@@ -49,55 +49,78 @@ const input = document.getElementById('msg-input') as HTMLInputElement
 const sendBtn = form.querySelector('button')!
 
 const userName = prompt('你的昵称', `user-${Math.random().toString(36).slice(2, 6)}`) || 'anon'
+const roomId =
+  (new URLSearchParams(location.search).get('room') || 'default').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) ||
+  'default'
+document.querySelector('.topbar h1')!.textContent = `讨论室 · ${roomId}`
 const protocol = location.protocol === 'https:' ? 'wss' : 'ws'
-const ws = new WebSocket(`${protocol}://${location.host}/ws?name=${encodeURIComponent(userName)}`)
 
-ws.addEventListener('open', () => {
-  connBadge.textContent = '在线'
-  connBadge.classList.add('online')
-  input.disabled = false
-  sendBtn.disabled = false
-  uploadBtn.disabled = false
-  input.focus()
-})
+let ws: WebSocket
+let retry = 0
 
-ws.addEventListener('close', () => {
-  connBadge.textContent = '已断开'
-  connBadge.classList.remove('online')
-  input.disabled = true
-  sendBtn.disabled = true
-})
+function connect() {
+  ws = new WebSocket(
+    `${protocol}://${location.host}/ws?room=${encodeURIComponent(roomId)}&name=${encodeURIComponent(userName)}`,
+  )
 
-ws.addEventListener('message', (ev) => {
-  let msg: WsMessage
-  try {
-    msg = JSON.parse(ev.data)
-  } catch {
-    return
-  }
-  switch (msg.type) {
-    case MsgType.chat: {
-      const p = msg.payload as ChatPayload
-      appendMessage(p.from, p.text, p.from === userName)
-      break
+  ws.addEventListener('open', () => {
+    retry = 0
+    connBadge.textContent = '在线'
+    connBadge.classList.add('online')
+    input.disabled = false
+    sendBtn.disabled = false
+    uploadBtn.disabled = false
+    input.focus()
+  })
+
+  ws.addEventListener('close', () => {
+    connBadge.classList.remove('online')
+    input.disabled = true
+    sendBtn.disabled = true
+    uploadBtn.disabled = true
+    retry++
+    if (retry > 10) {
+      connBadge.textContent = '已断开（停止重连）'
+      return
     }
-    case MsgType.presence: {
-      const p = msg.payload as PresencePayload
-      connBadge.title = `在线 ${p.users.length}/${p.max}: ${p.users.join(', ')}`
-      break
+    const delay = Math.min(15_000, 1000 * 2 ** (retry - 1))
+    connBadge.textContent = `重连中(${retry})…`
+    setTimeout(connect, delay)
+  })
+
+  ws.addEventListener('message', (ev) => {
+    let msg: WsMessage
+    try {
+      msg = JSON.parse(ev.data)
+    } catch {
+      return
     }
-    case MsgType.system: {
-      const p = msg.payload as SystemPayload
-      appendSystem(p.reason)
-      break
+    switch (msg.type) {
+      case MsgType.chat: {
+        const p = msg.payload as ChatPayload
+        appendMessage(p.from, p.text, p.from === userName)
+        break
+      }
+      case MsgType.presence: {
+        const p = msg.payload as PresencePayload
+        connBadge.title = `在线 ${p.users.length}/${p.max}: ${p.users.join(', ')}`
+        break
+      }
+      case MsgType.system: {
+        const p = msg.payload as SystemPayload
+        appendSystem(p.reason)
+        break
+      }
+      case MsgType.demo: {
+        const p = msg.payload as DemoPayload
+        showDemo(p.file, p.page, p.presenter)
+        break
+      }
     }
-    case MsgType.demo: {
-      const p = msg.payload as DemoPayload
-      showDemo(p.file, p.page, p.presenter)
-      break
-    }
-  }
-})
+  })
+}
+
+connect()
 
 form.addEventListener('submit', (e) => {
   e.preventDefault()

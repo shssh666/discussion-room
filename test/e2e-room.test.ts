@@ -1,0 +1,128 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { once } from 'node:events'
+import WebSocket from 'ws'
+import { buildApp, defaultDirs } from '../src/server/app.ts'
+import { MsgType, type ChatPayload, type WsMessage } from '../src/shared/protocol.ts'
+
+let portSeq = 3200
+const nextPort = () => ++portSeq
+
+async function startServer(port: number) {
+  const app = buildApp(defaultDirs())
+  await app.listen({ port, host: '127.0.0.1' })
+  return app
+}
+
+function connect(port: number, name: string, room = 'default'): Promise<{ ws: WebSocket; messages: WsMessage[] }> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws?room=${room}&name=${encodeURIComponent(name)}`)
+    const messages: WsMessage[] = []
+    ws.on('message', (data: Buffer | ArrayBuffer | Buffer[]) => {
+      try {
+        const str = Buffer.isBuffer(data) ? data.toString() : new TextDecoder().decode(data as ArrayBuffer)
+        messages.push(JSON.parse(str))
+      } catch {
+        /* ignore */
+      }
+    })
+    ws.on('open', () => resolve({ ws, messages }))
+    ws.on('error', reject)
+  })
+}
+
+function waitFor(messages: WsMessage[], type: MsgType, timeoutMs = 2000): Promise<WsMessage> {
+  const deadline = Date.now() + timeoutMs
+  return new Promise((resolve, reject) => {
+    const check = () => {
+      const found = messages.find((m) => m.type === type)
+      if (found) return resolve(found)
+      if (Date.now() > deadline) return reject(new Error(`timeout waiting ${type}`))
+      setTimeout(check, 20)
+    }
+    check()
+  })
+}
+
+test('不同房间消息隔离', async (t) => {
+  const port = nextPort()
+  const app = await startServer(port)
+  t.after(() => app.close())
+
+  const a = await connect(port, 'alice', 'roomA')
+  const b = await connect(port, 'bob', 'roomB')
+  const c = await connect(port, 'carol', 'roomA')
+  await waitFor(a.messages, MsgType.presence)
+  await waitFor(c.messages, MsgType.presence)
+
+  a.ws.send(JSON.stringify({ type: MsgType.chat, payload: { text: 'hello A' }, ts: Date.now() }))
+  // c 同房间应收到
+  const got = await waitFor(c.messages, MsgType.chat)
+  assert.equal((got.payload as ChatPayload).text, 'hello A')
+  // b 不同房间不应收到
+  await new Promise((r) => setTimeout(r, 300))
+  assert.equal(b.messages.filter((m) => m.type === MsgType.chat).length, 0)
+
+  a.ws.close()
+  b.ws.close()
+  c.ws.close()
+})
+
+test('每房间独立 4 人上限', async (t) => {
+  const port = nextPort()
+  const app = await startServer(port)
+  t.after(() => app.close())
+
+  const inA: Array<{ ws: WebSocket }> = []
+  for (let i = 0; i < 4; i++) inA.push(await connect(port, `a${i}`, 'capA'))
+  // 第 5 个进 capA 被拒
+  const fifth = await connect(port, 'overflow', 'capA')
+  const sys = await waitFor(fifth.messages, MsgType.system)
+  assert.match((sys.payload as { reason: string }).reason, /full/)
+  await once(fifth.ws, 'close')
+  // 但 capB 还能进
+  const b0 = await connect(port, 'b0', 'capB')
+  await waitFor(b0.messages, MsgType.presence)
+
+  for (const c of inA) c.ws.close()
+  b0.ws.close()
+})
+
+test('/rooms 列出房间及人数', async (t) => {
+  const port = nextPort()
+  const app = await startServer(port)
+  t.after(() => app.close())
+
+  const a = await connect(port, 'x', 'listRoom')
+  const b = await connect(port, 'y', 'listRoom')
+  await waitFor(b.messages, MsgType.presence)
+
+  const res = await fetch(`http://127.0.0.1:${port}/rooms`)
+  const rooms = (await res.json()) as Array<{ id: string; users: number }>
+  const target = rooms.find((r) => r.id === 'listRoom')
+  assert.ok(target, 'listRoom 应出现在列表')
+  assert.equal(target!.users, 2)
+
+  a.ws.close()
+  b.ws.close()
+})
+
+test('空房延迟回收', async (t) => {
+  const port = nextPort()
+  const app = buildApp(defaultDirs())
+  await app.listen({ port, host: '127.0.0.1' })
+  t.after(() => app.close())
+
+  const a = await connect(port, 'solo', 'gcRoom')
+  await waitFor(a.messages, MsgType.presence)
+  a.ws.close()
+
+  // 回收延迟 60s，这里用短等待确认"还没回收"再手动等回收不现实；
+  // 改为验证 close 后 scheduleGC 不报错且房间仍在（延迟内）
+  await new Promise((r) => setTimeout(r, 200))
+  const res = await fetch(`http://127.0.0.1:${port}/rooms`)
+  const rooms = (await res.json()) as Array<{ id: string; users: number }>
+  const target = rooms.find((r) => r.id === 'gcRoom')
+  assert.ok(target, '延迟期内房间应仍存在')
+  assert.equal(target!.users, 0)
+})
