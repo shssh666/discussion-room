@@ -85,6 +85,11 @@ async function uploadPlugin(app: FastifyInstance): Promise<void> {
           return reply.status(415).send({ error: 'MIME mismatch' })
         }
       }
+      // 纯文本格式（.mmd）拒绝二进制内容（NUL 字节）
+      if (ext === '.mmd' && head.includes(0)) {
+        try { unlinkSync(dest) } catch { /* ignore */ }
+        return reply.status(415).send({ error: 'binary content not allowed for .mmd' })
+      }
     }
 
     return reply.send({ name: savedName, size: totalSize })

@@ -38,7 +38,8 @@ export function buildApp(opts: AppOptions) {
     const mermaidDist = path.join(path.dirname(req.resolve('mermaid/package.json')), 'dist')
     app.register(fastifyStatic, { root: mermaidDist, prefix: '/js/vendor/', decorateReply: false })
   } catch {
-    /* mermaid 未安装时跳过 vendor 路由，前端降级为纯文本展示 */
+    // mermaid 未安装时跳过 vendor 路由，前端降级为纯文本展示
+    console.warn('[vendor] mermaid dist 不可用，/js/vendor/ 路由未注册')
   }
 
   // 文件上传下载（流式处理，不整体读入内存）

@@ -303,6 +303,7 @@ nextBtn.addEventListener('click', () => {
 
 // === mermaid 流程图渲染 ===
 let mermaidReady: Promise<MermaidLike> | null = null
+let mermaidRendering = false
 
 interface MermaidLike {
   initialize(cfg: Record<string, unknown>): void
@@ -327,6 +328,8 @@ function loadMermaid(): Promise<MermaidLike> {
 }
 
 async function renderMermaid(file: string) {
+  if (mermaidRendering) return // 渲染串行化：忽略并发渲染请求
+  mermaidRendering = true
   try {
     const srcRes = await fetch(`/files/${encodeURIComponent(file)}`)
     if (!srcRes.ok) throw new Error('读取源文件失败')
@@ -336,6 +339,8 @@ async function renderMermaid(file: string) {
     // strict：禁用 mermaid 内的交互回调与 html 标签，防 XSS
     m.initialize({ startOnLoad: false, securityLevel: 'strict' })
     const { svg } = await m.render(`mermaid-${Date.now()}`, code)
+    // mermaid securityLevel:'strict' 内部经 DOMPurify 净化其生成的 SVG；
+    // 此处 innerHTML 只接受 mermaid 自身渲染产物，不含任何用户原始 HTML
     mermaidBox.innerHTML = svg
     mermaidBox.style.display = 'block'
     previewHint.style.display = 'none'
@@ -343,5 +348,7 @@ async function renderMermaid(file: string) {
     mermaidBox.style.display = 'none'
     previewHint.textContent = `${file}（mermaid 渲染失败：${e instanceof Error ? e.message : '未知'}）`
     previewHint.style.display = 'block'
+  } finally {
+    mermaidRendering = false
   }
 }
