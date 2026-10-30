@@ -21,7 +21,7 @@ app.innerHTML = `
       <h2>演示区</h2>
       <div class="upload-area">
         <input type="file" id="file-input" accept=".png,.jpg,.jpeg,.gif,.pdf,.pptx,.svg,.mmd" />
-        <button id="upload-btn" disabled>上传</button>
+        <button id="upload-btn">上传</button>
         <span id="upload-status" class="hint"></span>
       </div>
       <div id="file-list" class="file-list"></div>
@@ -67,7 +67,6 @@ function connect() {
     connBadge.classList.add('online')
     input.disabled = false
     sendBtn.disabled = false
-    uploadBtn.disabled = false
     input.focus()
   })
 
@@ -75,7 +74,6 @@ function connect() {
     connBadge.classList.remove('online')
     input.disabled = true
     sendBtn.disabled = true
-    uploadBtn.disabled = true
     retry++
     if (retry > 10) {
       connBadge.textContent = '已断开（停止重连）'
@@ -156,7 +154,10 @@ const fileList = document.getElementById('file-list')!
 
 uploadBtn.addEventListener('click', async () => {
   const file = fileInput.files?.[0]
-  if (!file) return
+  if (!file) {
+    uploadStatus.textContent = '先选择文件'
+    return
+  }
   uploadBtn.disabled = true
   uploadStatus.textContent = '上传中…'
   try {
