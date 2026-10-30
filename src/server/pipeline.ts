@@ -26,6 +26,13 @@ interface PipelineJSON {
   guardrails: { revertRate: number | null; incidentRate: number | null }
 }
 
+/** 存量库自愈迁移（幂等）：补齐 M2 引入的列与 mode 约束放开 */
+async function migrate(p: import('pg').Pool): Promise<void> {
+  await p.query(`ALTER TABLE findings ADD COLUMN IF NOT EXISTS category text`)
+  await p.query(`ALTER TABLE findings ADD COLUMN IF NOT EXISTS m2_severity text`)
+  await p.query(`ALTER TABLE review_runs DROP CONSTRAINT IF EXISTS review_runs_mode_check`)
+}
+
 const EMPTY: PipelineJSON = {
   generatedAt: '',
   store: 'degraded',
@@ -63,6 +70,7 @@ async function pipelinePlugin(app: FastifyInstance): Promise<void> {
             console.error('[pg] pool error:', err.message)
           })
           await p.query('select 1')
+          await migrate(p) // 存量库自愈：补齐 M2 列与 mode 约束
           pool = p
           return p
         } catch {
@@ -99,7 +107,7 @@ async function pipelinePlugin(app: FastifyInstance): Promise<void> {
         GROUP BY p.id, p.number, p.merged_at, p.reverted
         ORDER BY p.number`)
       const catQ = await p.query(`
-        SELECT category,
+        SELECT COALESCE(category, 'uncategorized') AS category,
                COUNT(*) AS total,
                COUNT(*) FILTER (WHERE status='fixed') AS fixed,
                COUNT(*) FILTER (WHERE m2_severity='high') AS high

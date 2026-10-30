@@ -90,10 +90,11 @@ function buildGraph(data: Pipeline) {
   data.findingsByCategory.forEach((c, i) => {
     const col = i % 4
     const row = Math.floor(i / 4)
+    const catName = String(c.category ?? 'uncategorized')
     nodes.push({
-      id: `cat-${c.category}`,
+      id: `cat-${catName}`,
       kind: 'cat',
-      title: c.category,
+      title: catName,
       sub: `${c.total} 条 · 已修 ${c.fixed} · high ${c.high}`,
       dot: c.high > 0 ? 'dot-high' : c.total > c.fixed ? 'dot-med' : 'dot-ok',
       x: col * (W - 40) + 520,

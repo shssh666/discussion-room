@@ -112,8 +112,8 @@ function connect() {
       case MsgType.system: {
         const p = msg.payload as SystemPayload
         appendSystem(p.reason)
-        // 服务端明确拒绝加入 → 停止重连空转
-        if (/full|taken|too many rooms/i.test(p.reason)) stopReconnect = true
+        // 服务端明确拒绝加入 → 停止重连空转（^ 锚定，防用户名含 full/taken 误触发）
+        if (/^(room full|name taken|too many rooms)/i.test(p.reason)) stopReconnect = true
         break
       }
       case MsgType.demo: {
