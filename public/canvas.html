@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>流水线看板 · 无限画布</title>
+    <link rel="stylesheet" href="/canvas.css" />
+  </head>
+  <body>
+    <div id="hud">
+      <span id="hud-title">流水线看板</span>
+      <span id="hud-store" class="hud-chip"></span>
+      <span class="hud-hint">滚轮缩放 · 拖背景平移 · 拖节点布局</span>
+      <a href="/" class="hud-link">← 回讨论室</a>
+    </div>
+    <div id="viewport">
+      <div id="world">
+        <svg id="edges"></svg>
+      </div>
+    </div>
+    <script type="module" src="/js/canvas.js"></script>
+  </body>
+</html>

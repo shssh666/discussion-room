@@ -7,6 +7,7 @@ import { WebSocketServer } from 'ws'
 import { RoomRegistry } from './room.ts'
 import uploadPlugin from './upload.ts'
 import convertPlugin from './convert.ts'
+import pipelinePlugin from './pipeline.ts'
 import { MsgType, sanitizeRoomId, type WsMessage } from '../shared/protocol.ts'
 
 export interface AppOptions {
@@ -47,6 +48,8 @@ export function buildApp(opts: AppOptions) {
   app.register(uploadPlugin)
   // PPT 转换（即起即灭容器，并发=1，120s 超时）
   app.register(convertPlugin)
+  // 流水线状态 JSON（M5 看板数据层 + AI 可读）
+  app.register(pipelinePlugin)
 
   app.get('/healthz', async () => ({ ok: true, ts: Date.now() }))
 
