@@ -74,9 +74,12 @@ export function buildApp(opts: AppOptions) {
         if (!parsed || typeof parsed !== 'object') return
         if (parsed.type === MsgType.chat && parsed.payload && typeof (parsed.payload as { text?: string }).text === 'string') {
           const text = (parsed.payload as { text: string }).text
-          // 大小上限：单条消息最大 10KB，防 OOM
           if (text.length > 10_000) return
           void room.sendChat(clientId, text)
+        }
+        if (parsed.type === MsgType.demo && parsed.payload && typeof (parsed.payload as { file?: string }).file === 'string') {
+          const p = parsed.payload as { file: string; page?: number; total?: number }
+          void room.sendDemo(clientId, p.file, p.page, p.total)
         }
       })
 

@@ -1,5 +1,5 @@
 import type { WebSocket } from 'ws'
-import { MsgType, type ChatPayload, type PresencePayload, type WsMessage } from '../shared/protocol.ts'
+import { MsgType, type ChatPayload, type DemoPayload, type PresencePayload, type WsMessage } from '../shared/protocol.ts'
 
 const MAX_USERS = 4
 
@@ -66,6 +66,16 @@ export class Room {
       if (!from) return
       const payload: ChatPayload = { id: crypto.randomUUID(), from: from.name, text }
       const msg: WsMessage = { type: MsgType.chat, payload, ts: Date.now() }
+      this.sendToAll(msg)
+    })
+  }
+
+  async sendDemo(fromId: string, file: string, page?: number, total?: number): Promise<void> {
+    await this.enqueue(async () => {
+      const from = this.clients.get(fromId)
+      if (!from) return
+      const payload: DemoPayload = { file, page, total, presenter: from.name }
+      const msg: WsMessage = { type: MsgType.demo, payload, ts: Date.now() }
       this.sendToAll(msg)
     })
   }

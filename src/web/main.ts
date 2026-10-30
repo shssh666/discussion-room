@@ -1,4 +1,4 @@
-import { MsgType, type ChatPayload, type PresencePayload, type SystemPayload, type WsMessage } from '../shared/protocol.ts'
+import { MsgType, type ChatPayload, type DemoPayload, type PresencePayload, type SystemPayload, type WsMessage } from '../shared/protocol.ts'
 
 const app = document.querySelector<HTMLDivElement>('#app')
 if (!app) throw new Error('#app missing')
@@ -26,7 +26,15 @@ app.innerHTML = `
       </div>
       <div id="file-list" class="file-list"></div>
       <div id="preview-area" class="preview-area">
-        <p class="hint">选择文件预览 · PR#4 接入完整展示</p>
+        <p class="hint" id="preview-hint">选择文件开始演示</p>
+        <img id="preview-img" style="display:none;max-width:100%;max-height:100%" />
+        <iframe id="preview-pdf" style="display:none;width:100%;height:100%;border:none"></iframe>
+      </div>
+      <div class="demo-controls" id="demo-controls" style="display:none">
+        <button id="prev-page">◀ 上一页</button>
+        <span id="page-info"></span>
+        <button id="next-page">下一页 ▶</button>
+        <button id="present-btn">📢 同步给所有人</button>
       </div>
     </section>
   </main>
@@ -79,6 +87,11 @@ ws.addEventListener('message', (ev) => {
     case MsgType.system: {
       const p = msg.payload as SystemPayload
       appendSystem(p.reason)
+      break
+    }
+    case MsgType.demo: {
+      const p = msg.payload as DemoPayload
+      showDemo(p.file, p.page, p.presenter)
       break
     }
   }
@@ -159,3 +172,81 @@ async function refreshFileList() {
 }
 
 refreshFileList()
+
+// === 演示区 ===
+const previewHint = document.getElementById('preview-hint')!
+const previewImg = document.getElementById('preview-img') as HTMLImageElement
+const previewPdf = document.getElementById('preview-pdf') as HTMLIFrameElement
+const demoControls = document.getElementById('demo-controls')!
+const pageInfo = document.getElementById('page-info')!
+const prevBtn = document.getElementById('prev-page')!
+const nextBtn = document.getElementById('next-page')!
+const presentBtn = document.getElementById('present-btn')!
+
+let currentFile = ''
+let currentPage = 0
+
+fileList.addEventListener('click', (e) => {
+  const a = (e.target as HTMLElement).closest('.file-item') as HTMLAnchorElement | null
+  if (!a) return
+  const name = decodeURIComponent(a.getAttribute('href')?.replace('/files/', '') || '')
+  const ext = name.split('.').pop()?.toLowerCase() || ''
+  // 可预览的文件拦截默认行为做本地预览；其他文件（如 .pptx）放行让浏览器下载
+  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'pdf'].includes(ext)) {
+    e.preventDefault()
+    showDemo(name, undefined, undefined)
+  }
+})
+
+function showDemo(file: string, page?: number, presenter?: string) {
+  currentFile = file
+  currentPage = page ?? 0
+  previewHint.style.display = 'none'
+  previewImg.style.display = 'none'
+  previewPdf.style.display = 'none'
+
+  const ext = file.split('.').pop()?.toLowerCase() || ''
+  const url = `/files/${encodeURIComponent(file)}`
+
+  if (['png', 'jpg', 'jpeg', 'gif', 'svg'].includes(ext)) {
+    previewImg.src = url
+    previewImg.style.display = 'block'
+    demoControls.style.display = 'none'
+  } else if (ext === 'pdf') {
+    const pageFragment = (page ?? 0) > 0 ? `#page=${(page ?? 0) + 1}` : ''
+    previewPdf.src = url + pageFragment
+    previewPdf.style.display = 'block'
+    demoControls.style.display = 'flex'
+    pageInfo.textContent = presenter ? `${presenter} 正在演示 · 第 ${(page ?? 0) + 1} 页` : 'PDF 预览'
+  } else {
+    previewHint.textContent = `${file}（暂不支持预览，点击下载）`
+    previewHint.style.display = 'block'
+    demoControls.style.display = 'none'
+  }
+
+  if (presenter && presenter !== userName) {
+    appendSystem(`${presenter} 开始演示 ${file}`)
+  }
+}
+
+presentBtn.addEventListener('click', () => {
+  if (!currentFile) return
+  ws.send(JSON.stringify({ type: MsgType.demo, payload: { file: currentFile, page: currentPage }, ts: Date.now() }))
+  appendSystem('已同步给所有人')
+})
+
+prevBtn.addEventListener('click', () => {
+  currentPage = Math.max(0, currentPage - 1)
+  pageInfo.textContent = `第 ${currentPage + 1} 页`
+  if (currentFile.endsWith('.pdf')) {
+    previewPdf.src = `/files/${encodeURIComponent(currentFile)}#page=${currentPage + 1}`
+  }
+})
+
+nextBtn.addEventListener('click', () => {
+  currentPage++
+  pageInfo.textContent = `第 ${currentPage + 1} 页`
+  if (currentFile.endsWith('.pdf')) {
+    previewPdf.src = `/files/${encodeURIComponent(currentFile)}#page=${currentPage + 1}`
+  }
+})
