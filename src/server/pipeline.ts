@@ -58,6 +58,10 @@ async function pipelinePlugin(app: FastifyInstance): Promise<void> {
         try {
           const pg = (await import('pg')).default
           p = new pg.Pool({ connectionString: dsn, connectionTimeoutMillis: 2000, max: 2 })
+          p.on('error', (err: Error) => {
+            // idle 连接报错必须有监听，否则 Node 以 uncaughtException 崩进程
+            console.error('[pg] pool error:', err.message)
+          })
           await p.query('select 1')
           pool = p
           return p

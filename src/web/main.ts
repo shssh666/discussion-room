@@ -55,6 +55,7 @@ const protocol = location.protocol === 'https:' ? 'wss' : 'ws'
 
 let ws: WebSocket
 let retry = 0
+let stopReconnect = false // 服务端明确拒绝（满员/重名/房间超限）时不再重连空转
 
 function connect() {
   ws = new WebSocket(
@@ -76,6 +77,10 @@ function connect() {
     input.disabled = true
     sendBtn.disabled = true
     uploadBtn.disabled = true
+    if (stopReconnect) {
+      connBadge.textContent = '已被拒绝加入'
+      return
+    }
     retry++
     if (retry > 10) {
       connBadge.textContent = '已断开（停止重连）'
@@ -107,6 +112,8 @@ function connect() {
       case MsgType.system: {
         const p = msg.payload as SystemPayload
         appendSystem(p.reason)
+        // 服务端明确拒绝加入 → 停止重连空转
+        if (/full|taken|too many rooms/i.test(p.reason)) stopReconnect = true
         break
       }
       case MsgType.demo: {
