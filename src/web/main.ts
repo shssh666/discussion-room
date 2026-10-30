@@ -71,10 +71,12 @@ function connect() {
     input.focus()
   })
 
-  ws.addEventListener('close', () => {
+  ws.addEventListener('close', (ev: CloseEvent) => {
     connBadge.classList.remove('online')
     input.disabled = true
     sendBtn.disabled = true
+    // 4001 = 服务端明确拒绝（房间超限等）→ 停止重连空转
+    if (ev.code === 4001) stopReconnect = true
     if (stopReconnect) {
       connBadge.textContent = '已被拒绝加入'
       return

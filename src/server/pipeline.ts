@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import fp from 'fastify-plugin'
+import { config } from './config.ts'
 
 /**
  * /api/pipeline：流水线状态的结构化 JSON（M5 度量看板的数据层）。
@@ -26,11 +27,12 @@ interface PipelineJSON {
   guardrails: { revertRate: number | null; incidentRate: number | null }
 }
 
-/** 存量库自愈迁移（幂等）：补齐 M2 引入的列与 mode 约束放开 */
+/** 存量库自愈迁移（幂等）：补齐 M2 列；mode 约束 DROP 后必须 ADD 回扩展版，防新库/存量库 schema 分叉 */
 async function migrate(p: import('pg').Pool): Promise<void> {
   await p.query(`ALTER TABLE findings ADD COLUMN IF NOT EXISTS category text`)
   await p.query(`ALTER TABLE findings ADD COLUMN IF NOT EXISTS m2_severity text`)
   await p.query(`ALTER TABLE review_runs DROP CONSTRAINT IF EXISTS review_runs_mode_check`)
+  await p.query(`ALTER TABLE review_runs ADD CONSTRAINT review_runs_mode_check CHECK (mode IN ('quick','standard','deep','m2'))`)
 }
 
 const EMPTY: PipelineJSON = {
@@ -59,7 +61,7 @@ async function pipelinePlugin(app: FastifyInstance): Promise<void> {
     if (Date.now() - lastFail < RETRY_COOLDOWN) return null
     if (!poolInit) {
       poolInit = (async () => {
-        const dsn = process.env.PG_DSN
+        const dsn = config.pgDsn
         if (!dsn) return null
         let p: import('pg').Pool | null = null
         try {
@@ -111,7 +113,7 @@ async function pipelinePlugin(app: FastifyInstance): Promise<void> {
                COUNT(*) AS total,
                COUNT(*) FILTER (WHERE status='fixed') AS fixed,
                COUNT(*) FILTER (WHERE m2_severity='high') AS high
-        FROM findings GROUP BY category ORDER BY total DESC`)
+        FROM findings GROUP BY COALESCE(category, 'uncategorized') ORDER BY total DESC`)
       const engQ = await p.query(`
         SELECT COUNT(*) AS runs, MAX(ts) AS last, COUNT(DISTINCT reviewer_version) AS versions,
                MAX(reviewer_version) AS version

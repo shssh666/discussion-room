@@ -110,6 +110,11 @@ function buildGraph(data: Pipeline) {
       n.y = u.y
     }
   }
+  // 裁剪已不存在节点的位置，防 userPos 无限增长
+  const alive = new Set(nodes.map((n) => n.id))
+  for (const key of [...userPos.keys()]) {
+    if (!alive.has(key)) userPos.delete(key)
+  }
 }
 
 function render() {

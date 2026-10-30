@@ -73,7 +73,8 @@ export function buildApp(opts: AppOptions) {
       if (!room) {
         const msg: WsMessage = { type: MsgType.system, payload: { reason: 'too many rooms' }, ts: Date.now() }
         ws.send(JSON.stringify(msg))
-        ws.close()
+        // 用 close code 4001 传达拒绝（send 可能因立即 close 丢失，code 更可靠）
+        ws.close(4001, 'too many rooms')
         return
       }
       let clientId: string | null = null
