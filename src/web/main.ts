@@ -20,7 +20,7 @@ app.innerHTML = `
     <section class="panel" id="demo-panel">
       <h2>演示区</h2>
       <div class="upload-area">
-        <input type="file" id="file-input" accept=".png,.jpg,.jpeg,.gif,.pdf,.pptx,.svg" />
+        <input type="file" id="file-input" accept=".png,.jpg,.jpeg,.gif,.pdf,.pptx,.svg,.mmd" />
         <button id="upload-btn" disabled>上传</button>
         <span id="upload-status" class="hint"></span>
       </div>
@@ -28,6 +28,7 @@ app.innerHTML = `
       <div id="preview-area" class="preview-area">
         <p class="hint" id="preview-hint">选择文件开始演示</p>
         <button id="convert-btn" style="display:none">🔄 转换并预览</button>
+        <div id="mermaid-box" class="mermaid-box" style="display:none"></div>
         <img id="preview-img" style="display:none;max-width:100%;max-height:100%" />
         <iframe id="preview-pdf" style="display:none;width:100%;height:100%;border:none"></iframe>
       </div>
@@ -184,6 +185,7 @@ const prevBtn = document.getElementById('prev-page')!
 const nextBtn = document.getElementById('next-page')!
 const presentBtn = document.getElementById('present-btn')!
 const convertBtn = document.getElementById('convert-btn') as HTMLButtonElement
+const mermaidBox = document.getElementById('mermaid-box')!
 
 let currentFile = ''
 let currentPage = 0
@@ -195,7 +197,7 @@ fileList.addEventListener('click', (e) => {
   const name = decodeURIComponent(a.getAttribute('href')?.replace('/files/', '') || '')
   const ext = name.split('.').pop()?.toLowerCase() || ''
   // 可预览的文件拦截默认行为做本地预览；pptx 走转换流程；其他文件放行让浏览器下载
-  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'pdf', 'pptx'].includes(ext)) {
+  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'pdf', 'pptx', 'mmd'].includes(ext)) {
     e.preventDefault()
     void showDemo(name, undefined, undefined)
   }
@@ -208,6 +210,7 @@ function showDemo(file: string, page?: number, presenter?: string) {
   previewImg.style.display = 'none'
   previewPdf.style.display = 'none'
   convertBtn.style.display = 'none'
+  mermaidBox.style.display = 'none'
 
   const ext = file.split('.').pop()?.toLowerCase() || ''
 
@@ -233,6 +236,10 @@ function showDemo(file: string, page?: number, presenter?: string) {
     previewHint.style.display = 'block'
     convertBtn.style.display = 'inline-block'
     demoControls.style.display = 'none'
+  } else if (ext === 'mmd') {
+    currentPrefix = '/files/'
+    demoControls.style.display = 'none'
+    void renderMermaid(file)
   } else {
     previewHint.textContent = `${file}（暂不支持预览，点击下载）`
     previewHint.style.display = 'block'
@@ -293,3 +300,48 @@ nextBtn.addEventListener('click', () => {
     previewPdf.src = `${currentPrefix}${encodeURIComponent(currentFile)}#page=${currentPage + 1}`
   }
 })
+
+// === mermaid 流程图渲染 ===
+let mermaidReady: Promise<MermaidLike> | null = null
+
+interface MermaidLike {
+  initialize(cfg: Record<string, unknown>): void
+  render(id: string, code: string): Promise<{ svg: string }>
+}
+
+function loadMermaid(): Promise<MermaidLike> {
+  if (!mermaidReady) {
+    mermaidReady = new Promise((resolve, reject) => {
+      const s = document.createElement('script')
+      s.src = '/js/vendor/mermaid.min.js'
+      s.onload = () => {
+        const m = (window as unknown as { mermaid?: MermaidLike }).mermaid
+        if (m) resolve(m)
+        else reject(new Error('mermaid 全局对象缺失'))
+      }
+      s.onerror = () => reject(new Error('mermaid 脚本加载失败'))
+      document.head.appendChild(s)
+    })
+  }
+  return mermaidReady
+}
+
+async function renderMermaid(file: string) {
+  try {
+    const srcRes = await fetch(`/files/${encodeURIComponent(file)}`)
+    if (!srcRes.ok) throw new Error('读取源文件失败')
+    const code = await srcRes.text()
+    if (code.length > 200_000) throw new Error('mermaid 源码过大')
+    const m = await loadMermaid()
+    // strict：禁用 mermaid 内的交互回调与 html 标签，防 XSS
+    m.initialize({ startOnLoad: false, securityLevel: 'strict' })
+    const { svg } = await m.render(`mermaid-${Date.now()}`, code)
+    mermaidBox.innerHTML = svg
+    mermaidBox.style.display = 'block'
+    previewHint.style.display = 'none'
+  } catch (e) {
+    mermaidBox.style.display = 'none'
+    previewHint.textContent = `${file}（mermaid 渲染失败：${e instanceof Error ? e.message : '未知'}）`
+    previewHint.style.display = 'block'
+  }
+}

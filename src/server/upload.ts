@@ -7,7 +7,7 @@ import fp from 'fastify-plugin'
 
 const UPLOAD_DIR = path.resolve('data/files')
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
-const ALLOWED_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.pdf', '.pptx', '.svg'])
+const ALLOWED_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.pdf', '.pptx', '.svg', '.mmd'])
 
 const MAGIC: Array<{ ext: string; bytes: number[] }> = [
   { ext: '.png', bytes: [0x89, 0x50, 0x4e, 0x47] },
@@ -17,6 +17,7 @@ const MAGIC: Array<{ ext: string; bytes: number[] }> = [
   { ext: '.pdf', bytes: [0x25, 0x50, 0x44, 0x46] },
   { ext: '.pptx', bytes: [0x50, 0x4b, 0x03, 0x04] },
   { ext: '.svg', bytes: [] },
+  { ext: '.mmd', bytes: [] }, // 纯文本 mermaid 源码，跳过 magic 校验
 ]
 
 async function uploadPlugin(app: FastifyInstance): Promise<void> {
