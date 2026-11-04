@@ -1,0 +1,2 @@
+# git hooks 必须保持 LF：Windows 贡献者 clone（autocrlf=true）时防止 sh 脚本被转成 CRLF
+.githooks/* text eol=lf
