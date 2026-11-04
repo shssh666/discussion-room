@@ -80,6 +80,8 @@ CREATE TABLE eval_runs (
   reviewer_version text NOT NULL,
   case_id         bigint NOT NULL REFERENCES eval_cases(id),
   verdict         eval_verdict NOT NULL,
+  vote_min        int,                          -- M4 v1：该 verdict 的投票存活阈值（阈值对照跑分用）
+  votes           int,                          -- M4 v1：该 case 在重放中拿到的票数
   ts              timestamptz NOT NULL DEFAULT now()
 );
 
